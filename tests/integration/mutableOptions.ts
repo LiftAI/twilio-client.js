@@ -8,7 +8,7 @@ function waitFor(n: number, reject?: boolean) {
   return new Promise((res, rej) => setTimeout(reject ? rej : res, n));
 }
 
-describe('mutable options', function() {
+describe.only('mutable options', function() {
   let device: Device;
   let token: string;
 
@@ -24,16 +24,27 @@ describe('mutable options', function() {
     }
   });
 
-  it('should update edge', async function() {
-    this.timeout(10000);
+  it.only('should update edge', async function() {
+    this.timeout(100000);
 
-    device = new Device();
+    device = new Device(token, { edge: 'sydney' });
 
-    await device.register(token, { edge: 'sydney' });
+    await device.register();
     assert.equal(device.edge, 'sydney');
 
-    await device.register(token, { edge: 'ashburn' });
-    assert.equal(device.edge, 'ashburn');
+    const unregisteredPromise = new Promise(resolve => {
+      device.once('offline', resolve);
+    });
+    device.updateOptions({ edge: 'ashburn' });
+    await unregisteredPromise;
+
+    console.log('unregistered');
+
+    // await new Promise(r => setTimeout(r, 3000));
+
+    // await device.register();
+
+    // assert.equal(device.edge, 'ashburn');
   });
 
   context('ongoing connections', function() {
@@ -58,8 +69,8 @@ describe('mutable options', function() {
       ] = await Promise.all(['caller', 'receiver'].map(async (n): Promise<[Device, string, string]> => {
         const id = `device-${n}-${timestamp}`;
         const t = generateAccessToken(id);
-        const dev = new Device();
-        await dev.register(t);
+        const dev = new Device(t);
+        await dev.register();
         return [dev, id, t];
       }));
 
@@ -67,7 +78,7 @@ describe('mutable options', function() {
         receiver.once(Device.EventName.Incoming, resolve);
       });
 
-      callerConnection = caller.connect({ params: { To: receiverId } });
+      callerConnection = await caller.connect({ params: { To: receiverId } });
       receiverConnection = await receiverConnPromise;
       receiverConnection.accept();
 
@@ -88,7 +99,7 @@ describe('mutable options', function() {
       const logSpy = sinon.spy();
       caller['_log'].warn = logSpy;
 
-      caller.setOptions({});
+      caller.updateOptions();
       assert.equal(logSpy.args.filter(
         ([message]) => message === 'Existing Device has ongoing connections; ignoring new options.',
       ).length, 1);
@@ -100,7 +111,7 @@ describe('mutable options', function() {
 
       callerConnection.disconnect();
 
-      caller.setOptions({});
+      caller.updateOptions();
       assert.equal(logSpy.args.filter(
         ([message]) => message === 'Existing Device has ongoing connections; ignoring new options.',
       ).length, 0);
